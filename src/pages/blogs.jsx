@@ -627,25 +627,9 @@ export default function Blogs() {
               {/* Featured Image */}
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-2 block">Featured Image *</Label>
-                <Controller
-                  name="featuredImage"
-                  control={form.control}
-                  render={({ field, fieldState }) => (
-                    <div>
-                      <Input 
-                        {...field} 
-                        placeholder="Image URL (http:// or https://)" 
-                        className={fieldState.error ? 'border-red-500' : ''}
-                      />
-                      {fieldState.error && (
-                        <p className="text-red-500 text-sm mt-1">{fieldState.error.message}</p>
-                      )}
-                    </div>
-                  )}
-                />
                 <div className="mt-3">
                   <Label htmlFor="imageFile" className="text-sm text-gray-600 mb-2 block">
-                    Or upload an image file:
+                    upload an image file:
                   </Label>
                   <input 
                     id="imageFile"
