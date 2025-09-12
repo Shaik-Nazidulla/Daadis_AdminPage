@@ -1,5 +1,6 @@
 // pages/categories.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from 'react-redux';
 import { 
   fetchCategories,
@@ -16,6 +17,7 @@ import {
   TagIcon,
 } from '@heroicons/react/24/outline';
 
+
 const Categories = () => {
   const dispatch = useDispatch();
   const { categories, loading, error } = useSelector(state => state.categories);
@@ -30,6 +32,20 @@ const Categories = () => {
     hsn: ''
   });
   const [formErrors, setFormErrors] = useState({});
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Handle navigation from Dashboard
+  useEffect(() => {
+    if (location.state?.openAddModal) {
+      setShowModal(true);
+      // Clear the state to prevent reopening on refresh
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location.state, navigate, location.pathname]);
+
+
 
   useEffect(() => {
     const fetchData = async () => {

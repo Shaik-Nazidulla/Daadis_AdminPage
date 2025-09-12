@@ -1,6 +1,7 @@
 // pages/discounts.jsx
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useLocation, useNavigate } from "react-router-dom";
 import { 
   fetchDiscounts, 
   createDiscount, 
@@ -19,6 +20,7 @@ import {
   CurrencyRupeeIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
+
 
 const Discounts = () => {
   const dispatch = useDispatch();
@@ -45,6 +47,18 @@ const Discounts = () => {
     description: '',
     status: 'active'
   });
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Handle navigation from Dashboard
+  useEffect(() => {
+    if (location.state?.openAddModal) {
+      setShowModal(true);
+      // Clear the state to prevent reopening on refresh
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location.state, navigate, location.pathname]);
 
   // Fetch discounts on component mount
   useEffect(() => {

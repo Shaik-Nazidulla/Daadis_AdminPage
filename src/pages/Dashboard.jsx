@@ -1,6 +1,7 @@
 // pages/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { 
   ShoppingBagIcon, 
   TagIcon, 
@@ -26,11 +27,12 @@ import { fetchDiscounts } from '../redux/slices/discountsSlice';
 
 const Dashboard = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const products = useSelector(state => state.products.products);
   const categories = useSelector(state => state.categories.categories);
   const orders = useSelector(state => state.orders.orders);
   const discounts = useSelector(state => state.discounts.discounts);
-  const [timeRange, setTimeRange] = useState('today'); // today, week, month
+  const [timeRange, setTimeRange] = useState('today'); // today, week, month, annual, all
 
   // Fetch data on component mount
   useEffect(() => {
@@ -40,7 +42,7 @@ const Dashboard = () => {
     dispatch(fetchDiscounts());
   }, [dispatch]);
 
-  // Calculate time-based metrics
+  // Calculate time-based metrics with expanded ranges
   const getDateRange = (range) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -54,6 +56,15 @@ const Dashboard = () => {
       case 'month':
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
         return { start: monthStart, end: now };
+      case 'annual':
+        const yearStart = new Date(today.getFullYear(), 0, 1);
+        return { start: yearStart, end: now };
+      case 'all':
+        // Get the earliest order date or use a very old date
+        const earliestOrder = orders.length > 0 
+          ? new Date(Math.min(...orders.map(o => new Date(o.createdAt))))
+          : new Date('2020-01-01');
+        return { start: earliestOrder, end: now };
       default:
         return { start: today, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
     }
@@ -80,6 +91,30 @@ const Dashboard = () => {
     outOfStockProducts: products.filter(p => p.stock === 0).length,
     activeDiscounts: discounts.filter(d => d.status === 'active').length,
     averageOrderValue: orders.length > 0 ? Math.round(orders.reduce((sum, o) => sum + o.total, 0) / orders.length) : 0
+  };
+
+  // Quick Actions handlers
+  const handleQuickAction = (action) => {
+    switch (action) {
+      case 'add-product':
+        // Navigate to products page and trigger add modal
+        navigate('/products', { state: { openAddModal: true } });
+        break;
+      case 'new-category':
+        // Navigate to categories page and trigger add modal
+        navigate('/categories', { state: { openAddModal: true } });
+        break;
+      case 'view-orders':
+        // Navigate to orders page
+        navigate('/orders');
+        break;
+      case 'create-offer':
+        // Navigate to discounts page and trigger add modal
+        navigate('/discounts', { state: { openAddModal: true } });
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
   };
 
   // Top performing products
@@ -145,9 +180,21 @@ const Dashboard = () => {
     return activities.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 8);
   };
 
+  // Format time range display
+  const getTimeRangeDisplay = () => {
+    switch (timeRange) {
+      case 'today': return "Today's";
+      case 'week': return "This Week's";
+      case 'month': return "This Month's";
+      case 'annual': return "This Year's";
+      case 'all': return "Overall";
+      default: return "Today's";
+    }
+  };
+
   const mainStats = [
     {
-      title: 'Today\'s Orders',
+      title: `${getTimeRangeDisplay()} Orders`,
       value: stats.todaysOrders,
       icon: ShoppingCartIcon,
       change: `${stats.todaysOrders > 0 ? '+' : ''}${stats.todaysOrders}`,
@@ -155,7 +202,7 @@ const Dashboard = () => {
       subtitle: `Total: ${stats.totalOrders}`
     },
     {
-      title: 'Today\'s Revenue',
+      title: `${getTimeRangeDisplay()} Revenue`,
       value: `₹${stats.todaysRevenue.toLocaleString()}`,
       icon: CurrencyRupeeIcon,
       change: `₹${stats.averageOrderValue} avg`,
@@ -221,21 +268,23 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-pink-500 p-6 rounded-lg shadow-sm text-white">
+      <div className="bg-orange-500 p-6 rounded-lg shadow-sm text-white">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Welcome to Daadi's Dashboard</h1>
-            <p className="mt-2 opacity-90">Sweet moments, sweeter business - Here's your daily overview</p>
+            <p className="mt-2 opacity-90">Sweet moments, sweeter business - Here's your {timeRange === 'all' ? 'overall' : timeRange} overview</p>
           </div>
           <div className="flex items-center space-x-4">
             <select 
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
-              className="bg-white bg-opacity-20 border border-white border-opacity-30 text-white rounded-lg px-3 py-2 text-sm"
+              className="bg-white bg-opacity-20 border border-white border-opacity-30 text-black rounded-lg px-3 py-2 text-sm"
             >
               <option value="today">Today</option>
               <option value="week">This Week</option>
               <option value="month">This Month</option>
+              <option value="annual">Annual</option>
+              <option value="all">All (Overall)</option>
             </select>
             <SparklesIcon className="w-8 h-8 animate-pulse" />
           </div>
@@ -303,9 +352,6 @@ const Dashboard = () => {
         <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-gray-900">Recent Orders</h2>
-            <button className="text-orange-500 hover:text-orange-600 text-sm font-medium">
-              View All →
-            </button>
           </div>
           <div className="space-y-3">
             {recentOrders.map((order) => (
@@ -373,7 +419,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Selling Products */}
         <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Top Selling Sweets</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Top Selling Products</h2>
           <div className="space-y-4">
             {topProducts.map((product, index) => (
               <div key={product.id} className="flex items-center space-x-4 p-3 border border-gray-100 rounded-lg">
@@ -441,30 +487,34 @@ const Dashboard = () => {
       {/* Quick Actions */}
       <div className="bg-white p-6 rounded-lg shadow-sm">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button 
+            onClick={() => handleQuickAction('add-product')}
+            className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group"
+          >
             <ShoppingBagIcon className="w-8 h-8 text-gray-400 group-hover:text-orange-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-gray-600 group-hover:text-orange-600">Add Product</p>
           </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group">
+          <button 
+            onClick={() => handleQuickAction('new-category')}
+            className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group"
+          >
             <TagIcon className="w-8 h-8 text-gray-400 group-hover:text-orange-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-gray-600 group-hover:text-orange-600">New Category</p>
           </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group">
+          <button 
+            onClick={() => handleQuickAction('view-orders')}
+            className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group"
+          >
             <ShoppingCartIcon className="w-8 h-8 text-gray-400 group-hover:text-orange-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-gray-600 group-hover:text-orange-600">View Orders</p>
           </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group">
+          <button 
+            onClick={() => handleQuickAction('create-offer')}
+            className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group"
+          >
             <GiftIcon className="w-8 h-8 text-gray-400 group-hover:text-orange-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-gray-600 group-hover:text-orange-600">Create Offer</p>
-          </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group">
-            <ChartBarIcon className="w-8 h-8 text-gray-400 group-hover:text-orange-500 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-600 group-hover:text-orange-600">View Reports</p>
-          </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors group">
-            <UserGroupIcon className="w-8 h-8 text-gray-400 group-hover:text-orange-500 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-600 group-hover:text-orange-600">Customers</p>
           </button>
         </div>
       </div>

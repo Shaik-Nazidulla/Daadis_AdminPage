@@ -23,6 +23,7 @@ import {
   ExclamationTriangleIcon,
   PhotoIcon,
 } from "@heroicons/react/24/outline";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const Products = () => {
   const dispatch = useDispatch();
@@ -54,6 +55,17 @@ const Products = () => {
 
   // Image preview state
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Handle navigation from Dashboard
+useEffect(() => {
+  if (location.state?.openAddModal) {
+    handleOpenModal();
+    // Clear the state to prevent reopening on refresh
+    navigate(location.pathname, { replace: true });
+  }
+}, [location.state, navigate, location.pathname]);
 
   useEffect(() => {
     dispatch(fetchProducts({ page: 1, limit: 12 }));
