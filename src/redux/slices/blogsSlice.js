@@ -98,37 +98,32 @@ export const fetchBlogById = createAsyncThunk(
   }
 );
 
+// Fixed createBlogAsync in your blogsSlice.js
 export const createBlogAsync = createAsyncThunk(
   'blogs/create',
   async (blogData, { rejectWithValue }) => {
     try {
-      // Map interface for API compatibility
-      const apiData = {
-        blogName: blogData.title,
+      console.log('🚀 Creating blog with data:', {
         title: blogData.title,
-        content: blogData.content,
-        author: blogData.author,
-        category: blogData.category,
-        featuredImage: blogData.featuredImage,
-        featuredImageFile: blogData.featuredImageFile,
-        excerpt: blogData.excerpt,
-        tags: blogData.tags,
-        status: blogData.status,
-        metaTitle: blogData.metaTitle,
-        metaDescription: blogData.metaDescription,
-        blogContent: {
-          markup: blogData.content,
-          design: blogData.blogContent?.design || {}
-        }
-      };
+        hasFile: !!(blogData.featuredImageFile),
+        hasUrl: !!(blogData.featuredImage),
+        tagsCount: blogData.tags?.length || 0
+      });
+
+      // Pass the data directly to the API - let it handle FormData vs JSON logic
+      const response = await blogsAPI.createBlog(blogData);
       
-      const response = await blogsAPI.createBlog(apiData);
+      console.log('✅ Blog created successfully:', response);
       
+      // Handle different response structures
       let blog = response;
       if (response.data) {
         blog = response.data;
+      } else if (response.blog) {
+        blog = response.blog;
       }
       
+      // Normalize the response to consistent format
       return {
         ...blog,
         id: blog._id || blog.id,
@@ -138,10 +133,45 @@ export const createBlogAsync = createAsyncThunk(
         featuredImage: blog.featuredImage || blog.blogImgUrl?.url || '',
         blogImgUrl: blog.blogImgUrl || { url: blog.featuredImage || '', publicId: '' },
         blogContent: blog.blogContent || { markup: blog.content || '', design: {} },
-        blogName: blog.blogName || blog.title || ''
+        blogName: blog.blogName || blog.title || '',
+        author: blog.author || 'Admin',
+        category: blog.category || 'General',
+        status: blog.status || 'draft',
+        createdAt: blog.createdAt || new Date().toISOString(),
+        updatedAt: blog.updatedAt || new Date().toISOString(),
+        excerpt: blog.excerpt || '',
+        tags: blog.tags || [],
+        views: blog.views || 0,
+        likes: blog.likes || 0,
+        metaTitle: blog.metaTitle || '',
+        metaDescription: blog.metaDescription || ''
       };
     } catch (error) {
-      return rejectWithValue(error.message || 'Failed to create blog');
+      console.error('❌ Create blog error:', {
+        message: error.message,
+        status: error.status,
+        responseData: error.responseData,
+        stack: error.stack
+      });
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to create blog';
+      
+      if (error.status === 400) {
+        errorMessage = 'Invalid blog data provided';
+      } else if (error.status === 401) {
+        errorMessage = 'You are not authorized to create blogs';
+      } else if (error.status === 413) {
+        errorMessage = 'Image file is too large';
+      } else if (error.status === 500) {
+        errorMessage = 'Server error while creating blog';
+      } else if (error.isNetworkError) {
+        errorMessage = 'Network error - please check your connection';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      return rejectWithValue(errorMessage);
     }
   }
 );

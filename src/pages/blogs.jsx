@@ -1,602 +1,771 @@
-// pages/blogs.jsx - Updated blogs page with new API endpoints
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   fetchAllBlogs,
   createBlogAsync,
   updateBlogAsync,
   deleteBlogAsync,
-  toggleBlogStatus,
-  clearError
 } from '../redux/slices/blogsSlice';
-import { 
-  PlusIcon, 
-  MagnifyingGlassIcon, 
-  PencilIcon, 
-  TrashIcon,
-  EyeIcon,
-  DocumentTextIcon,
-  HeartIcon,
-  CalendarIcon,
-  TagIcon
-} from '@heroicons/react/24/outline';
+import {
+  flexRender,
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+} from '@tanstack/react-table';
+import { PlusIcon, PencilIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/outline';
+import { Button } from '../ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuCheckboxItem,
+} from '../ui/dropdown-menu';
+import {
+  Table,
+  TableBody,
+  TableHeader,
+  TableRow,
+  TableCell,
+} from '../ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '../ui/dialog';
+import { Label } from '../ui/label';
+import { Input } from '../ui/input';
+import { toast } from 'sonner';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import EmailEditor from 'react-email-editor';
 
-const Blogs = () => {
+const blogSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  excerpt: z.string().optional(),
+  content: z.string().min(1, 'Content is required'),
+  author: z.string().min(1, 'Author is required'),
+  category: z.string().min(1, 'Category is required'),
+  status: z.enum(['draft', 'published', 'archived']),
+  tags: z.array(z.string()),
+  metaTitle: z.string().optional(),
+  metaDescription: z.string().optional(),
+  featuredImage: z.string().min(1, 'Featured Image URL is required'),
+  featuredImageFile: z.any().optional(),
+  blogContent: z.object({
+    markup: z.string(),
+    design: z.any(),
+  }),
+});
+
+export default function Blogs() {
   const dispatch = useDispatch();
-  const { blogs, categories, loading, error } = useSelector((state) => state.blogs);
-  
+  const { blogs, categories = ['Recipes', 'Health', 'Festivals', 'Stories', 'Tips'], loading, error } = useSelector(state => state.blogs);
+
+  // Table state
+  const [sorting, setSorting] = useState([]);
+  const [columnFilters, setColumnFilters] = useState([]);
+  const [columnVisibility, setColumnVisibility] = useState({});
+  const [rowSelection, setRowSelection] = useState({});
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Modal and form state
   const [showModal, setShowModal] = useState(false);
   const [editingBlog, setEditingBlog] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
 
-  const [formData, setFormData] = useState({
-    title: '',
-    excerpt: '',
-    content: '',
-    featuredImage: '',
-    featuredImageFile: null,
-    author: '',
-    category: 'Recipes',
-    tags: [],
-    status: 'draft',
-    metaTitle: '',
-    metaDescription: '',
-    blogContent: {
-      markup: '',
-      design: {}
-    }
+  // Validate & control entire form
+  const form = useForm({
+    resolver: zodResolver(blogSchema),
+    defaultValues: {
+      title: '',
+      excerpt: '',
+      content: '',
+      author: '',
+      category: 'Recipes',
+      status: 'draft',
+      tags: [],
+      metaTitle: '',
+      metaDescription: '',
+      featuredImage: '',
+      featuredImageFile: null,
+      blogContent: {
+        markup: '',
+        design: {},
+      },
+    },
   });
 
   const [newTag, setNewTag] = useState('');
+  const [imagePreview, setImagePreview] = useState('');
+  const emailEditorRef = useRef(null);
 
-  // Fetch blogs on component mount
   useEffect(() => {
     dispatch(fetchAllBlogs());
   }, [dispatch]);
 
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      excerpt: '',
-      content: '',
-      featuredImage: '',
-      featuredImageFile: null,
-      author: '',
-      category: 'Recipes',
-      tags: [],
-      status: 'draft',
-      metaTitle: '',
-      metaDescription: '',
-      blogContent: {
-        markup: '',
-        design: {}
-      }
-    });
-    setEditingBlog(null);
-    setNewTag('');
-  };
+  // Filter blogs based on search term
+  const filteredBlogs = useMemo(() => {
+    if (!searchTerm) return blogs || [];
+    return (blogs || []).filter(blog =>
+      blog.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      blog.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      blog.category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [blogs, searchTerm]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (editingBlog) {
-        await dispatch(updateBlogAsync({ 
-          id: editingBlog._id || editingBlog.id, 
-          updates: formData 
-        })).unwrap();
-      } else {
-        await dispatch(createBlogAsync(formData)).unwrap();
-      }
-      setShowModal(false);
-      resetForm();
-    } catch (error) {
-      console.error('Error saving blog:', error);
-    }
-  };
+  // Table columns, plain objects (no import of ColumnDef)
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'featuredImage',
+      header: 'Image',
+      cell: ({ row }) => {
+        const url = row.original.featuredImage;
+        return url ? (
+          <img src={url} alt="blog" className="h-12 w-20 object-cover rounded-lg shadow-sm" />
+        ) : (
+          <div className="h-12 w-20 bg-gray-200 rounded-lg flex items-center justify-center">
+            <span className="text-xs text-gray-500">No image</span>
+          </div>
+        );
+      },
+    },
+    { 
+      accessorKey: 'title', 
+      header: 'Title', 
+      cell: ({ row }) => (
+        <div className="max-w-xs">
+          <p className="font-semibold text-gray-900 truncate">{row.original.title}</p>
+          {row.original.excerpt && (
+            <p className="text-sm text-gray-500 truncate mt-1">{row.original.excerpt}</p>
+          )}
+        </div>
+      )
+    },
+    { accessorKey: 'author', header: 'Author', cell: info => info.getValue() },
+    { accessorKey: 'category', header: 'Category', cell: info => info.getValue() },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: ({ row }) => {
+        const status = row.original.status;
+        const statusClass = status === 'published' ? 'bg-green-100 text-green-800 border-green-200' 
+          : status === 'draft' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' 
+          : 'bg-gray-100 text-gray-800 border-gray-200';
+        return (
+          <span className={`px-3 py-1 rounded-full text-sm font-medium border ${statusClass}`}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'createdAt',
+      header: 'Created',
+      cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString('en-IN', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      }),
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const blog = row.original;
+        return (
+          <div className="flex gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8 w-8 p-0">
+                  <span className="sr-only">Open menu</span>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zM12 13a1 1 0 110-2 1 1 0 010 2zM12 20a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => onEdit(blog)}>
+                  <PencilIcon className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDelete(blog._id)} className="text-red-600">
+                  <TrashIcon className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      },
+    },
+  ], []);
 
-  const handleEdit = (blog) => {
-    setEditingBlog(blog);
-    setFormData({
-      title: blog.title || '',
-      excerpt: blog.excerpt || '',
-      content: blog.content || blog.blogContent?.markup || '',
-      featuredImage: blog.featuredImage || blog.blogImgUrl?.url || '',
-      featuredImageFile: null,
-      author: blog.author || '',
-      category: blog.category || 'Recipes',
-      tags: blog.tags || [],
-      status: blog.status || 'draft',
-      metaTitle: blog.metaTitle || '',
-      metaDescription: blog.metaDescription || '',
-      blogContent: {
-        markup: blog.content || blog.blogContent?.markup || '',
-        design: blog.blogContent?.design || {}
-      }
-    });
-    setShowModal(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this blog post?')) {
-      try {
-        await dispatch(deleteBlogAsync(id)).unwrap();
-      } catch (error) {
-        console.error('Error deleting blog:', error);
-      }
-    }
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData({ 
-        ...formData, 
-        featuredImageFile: file,
-        featuredImage: '' // Clear URL when file is selected
-      });
-    }
-  };
-
-  const addTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
-      setNewTag('');
-    }
-  };
-
-  const removeTag = (tagToRemove) => {
-    setFormData({ ...formData, tags: formData.tags.filter(tag => tag !== tagToRemove) });
-  };
-
-  const filteredBlogs = blogs.filter(blog => {
-    const matchesSearch = blog.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         blog.author?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || blog.status === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || blog.category === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
+  // useReactTable instance
+  const table = useReactTable({
+    data: filteredBlogs,
+    columns,
+    state: { sorting, columnFilters, columnVisibility, rowSelection, pagination },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
+    onPaginationChange: setPagination,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'published': return 'bg-green-100 text-green-800';
-      case 'draft': return 'bg-yellow-100 text-yellow-800';
-      case 'archived': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  function resetForm() {
+    form.reset();
+    setImagePreview('');
+    setNewTag('');
+    setEditingBlog(null);
+  }
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+  // Fill form for edit
+  function onEdit(blog) {
+    setEditingBlog(blog);
+    form.reset({
+      title: blog.title,
+      excerpt: blog.excerpt,
+      content: blog.content,
+      author: blog.author,
+      category: blog.category,
+      status: blog.status,
+      tags: blog.tags || [],
+      metaTitle: blog.metaTitle,
+      metaDescription: blog.metaDescription,
+      featuredImage: blog.featuredImage,
+      blogContent: blog.blogContent || { markup: '', design: {} },
     });
-  };
+    setImagePreview(blog.featuredImage);
+    setShowModal(true);
+  }
 
-  const optimizeCloudinaryUrl = (url) => {
-    if (!url || !url.includes('cloudinary')) return url;
-    // Basic optimization - you can enhance this based on your needs
-    return url.replace('/upload/', '/upload/w_400,h_250,c_fill,q_auto,f_auto/');
-  };
+  // Delete blog handler
+  async function onDelete(id) {
+    if (!window.confirm('Are you sure you want to delete this blog?')) return;
+    try {
+      await dispatch(deleteBlogAsync(id)).unwrap();
+      toast.success('Blog deleted successfully');
+      dispatch(fetchAllBlogs());
+    } catch (e) {
+      toast.error('Failed to delete blog');
+    }
+  }
+
+  // Image file change handler
+  function onImageChange(e) {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        toast.error('Image must be JPEG, PNG or WebP');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size must be less than 5MB');
+        return;
+      }
+
+      form.setValue('featuredImageFile', file);
+      form.setValue('featuredImage', '');
+      setImagePreview(URL.createObjectURL(file));
+    }
+  }
+
+  // Add tag
+  function addTag() {
+    if (!form.getValues('tags')) form.setValue('tags', []);
+    if (newTag && !form.getValues('tags').includes(newTag.trim())) {
+      form.setValue('tags', [...form.getValues('tags'), newTag.trim()]);
+      setNewTag('');
+    }
+  }
+
+  // Remove tag
+  function removeTag(tag) {
+    form.setValue('tags', form.getValues('tags').filter(t => t !== tag));
+  }
+
+  // Handle form submit (create or update)
+  async function onSubmit(data) {
+    if (data.featuredImageFile) {
+      try {
+        const uploadData = new FormData();
+        uploadData.append('blogCover', data.featuredImageFile);
+
+        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}${import.meta.env.VITE_PORT}${import.meta.env.VITE_API_URL}media/upload`, {
+          method: 'POST',
+          credentials: 'include',
+          body: uploadData
+        });
+        const result = await res.json();
+
+        if (!res.ok) throw new Error(result.message || 'Upload failed');
+
+        data.featuredImage = result.data.url;
+        data.blogContent = data.blogContent || { markup: '', design: {} };
+        data.blogContent.design = data.blogContent.design || {};
+        data.blogContent.markup = data.content;
+
+      } catch (e) {
+        toast.error('Image upload failed: ' + e.message);
+        return;
+      }
+    }
+
+    if (!data.featuredImage || (!data.featuredImage.startsWith('http://') && !data.featuredImage.startsWith('https://'))) {
+      toast.error('Valid featured image URL is required');
+      return;
+    }
+
+    try {
+      if (editingBlog) {
+        await dispatch(updateBlogAsync({ id: editingBlog._id, updates: data })).unwrap();
+        toast.success('Blog updated successfully');
+      } else {
+        await dispatch(createBlogAsync(data)).unwrap();
+        toast.success('Blog created successfully');
+      }
+      setShowModal(false);
+      dispatch(fetchAllBlogs());
+      resetForm();
+    } catch (e) {
+      toast.error('Failed to save blog: ' + (e.message || 'Unknown error'));
+    }
+  }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto font-[Quicksand]">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Blog Management</h1>
-          <p className="text-gray-600 mt-1">Create and manage blog posts about sweets and recipes</p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span>Add Blog Post</span>
-        </button>
-      </div>
-
-      {/* Error Handling */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          <span className="block sm:inline">{error}</span>
-          <button 
-            onClick={() => dispatch(clearError())}
-            className="float-right font-bold"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search blogs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-          >
-            <option value="all">All Status</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft</option>
-            <option value="archived">Archived</option>
-          </select>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-          >
-            <option value="all">All Categories</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Blogs</p>
-              <p className="text-3xl font-bold text-gray-900">{blogs.length}</p>
+              <h1 className="text-3xl font-bold text-gray-900">Manage Blogs</h1>
+              <p className="text-gray-600 mt-1">Create and manage your blog posts</p>
             </div>
-            <DocumentTextIcon className="w-12 h-12 text-yellow-500" />
+            <Button 
+              onClick={() => { resetForm(); setShowModal(true) }} 
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center gap-2 shadow-sm"
+            >
+              <PlusIcon className="h-5 w-5" />
+              New Blog
+            </Button>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Published</p>
-              <p className="text-3xl font-bold text-green-600">
-                {blogs.filter(b => b.status === 'published').length}
-              </p>
-            </div>
-            <CalendarIcon className="w-12 h-12 text-green-500" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Views</p>
-              <p className="text-3xl font-bold text-blue-600">
-                {blogs.reduce((sum, b) => sum + (b.views || 0), 0).toLocaleString()}
-              </p>
-            </div>
-            <EyeIcon className="w-12 h-12 text-blue-500" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Likes</p>
-              <p className="text-3xl font-bold text-red-600">
-                {blogs.reduce((sum, b) => sum + (b.likes || 0), 0)}
-              </p>
-            </div>
-            <HeartIcon className="w-12 h-12 text-red-500" />
-          </div>
-        </div>
-      </div>
 
-      {/* Loading Spinner */}
-      {loading && (
-        <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
+        {/* Search and Filters */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <Label htmlFor="search" className="sr-only">Search blogs</Label>
+              <input
+                id="search"
+                type="text"
+                placeholder="Search blogs by title, author, or category..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <EyeIcon className="h-4 w-4" />
+                  View
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                {table
+                  .getAllColumns()
+                  .filter(column => column.getCanHide())
+                  .map(column => {
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) =>
+                          column.toggleVisibility(!!value)
+                        }
+                      >
+                        {column.id}
+                      </DropdownMenuCheckboxItem>
+                    )
+                  })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      )}
 
-      {/* Blogs Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredBlogs.map((blog) => (
-          <div key={blog._id || blog.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-            <img
-              src={optimizeCloudinaryUrl(blog.featuredImage || blog.blogImgUrl?.url) || 'https://via.placeholder.com/400x250'}
-              alt={blog.title}
-              className="w-full h-48 object-cover"
-              onError={(e) => {
-                e.target.src = 'https://via.placeholder.com/400x250';
-              }}
-            />
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(blog.status)}`}>
-                  {blog.status}
-                </span>
-                <span className="text-xs text-gray-500">{blog.category}</span>
+        {/* Table */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map(headerGroup => (
+                <TableRow key={headerGroup.id} className="bg-gray-50">
+                  {headerGroup.headers.map(header => (
+                    <TableCell key={header.id} className="font-semibold text-gray-900 py-4">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows.length > 0 ? (
+                table.getRowModel().rows.map(row => (
+                  <TableRow key={row.id} className="hover:bg-gray-50 transition-colors">
+                    {row.getVisibleCells().map(cell => (
+                      <TableCell key={cell.id} className="py-4">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="text-center py-12 text-gray-500">
+                    {searchTerm ? 'No blogs found matching your search.' : 'No blogs found. Create your first blog post!'}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+            <div className="text-sm text-gray-700">
+              Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
+              {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredBlogs.length)} of{' '}
+              {filteredBlogs.length} results
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button 
+                onClick={() => table.previousPage()} 
+                disabled={!table.getCanPreviousPage()}
+                variant="outline"
+                size="sm"
+              >
+                Previous
+              </Button>
+              <Button 
+                onClick={() => table.nextPage()} 
+                disabled={!table.getCanNextPage()}
+                variant="outline"
+                size="sm"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Create/Edit Modal */}
+        <Dialog open={showModal} onOpenChange={setShowModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold">
+                {editingBlog ? 'Edit Blog' : 'Create New Blog'}
+              </DialogTitle>
+              <DialogDescription>
+                Fill in the details below to {editingBlog ? 'update' : 'create'} your blog post
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="title" className="text-sm font-medium text-gray-700 mb-2 block">
+                    Blog Title *
+                  </Label>
+                  <Controller
+                    name="title"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <div>
+                        <Input 
+                          {...field} 
+                          id="title"
+                          placeholder="Enter blog title" 
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                        {fieldState.error && (
+                          <p className="text-red-500 text-sm mt-1">{fieldState.error.message}</p>
+                        )}
+                      </div>
+                    )}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="author" className="text-sm font-medium text-gray-700 mb-2 block">
+                    Author *
+                  </Label>
+                  <Controller
+                    name="author"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <div>
+                        <Input 
+                          {...field} 
+                          id="author"
+                          placeholder="Author name" 
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                        {fieldState.error && (
+                          <p className="text-red-500 text-sm mt-1">{fieldState.error.message}</p>
+                        )}
+                      </div>
+                    )}
+                  />
+                </div>
               </div>
-              
-              <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">{blog.title}</h3>
-              <p className="text-sm text-gray-600 mb-3 line-clamp-2">{blog.excerpt}</p>
-              
-              <div className="flex flex-wrap gap-1 mb-3">
-                {blog.tags && blog.tags.slice(0, 3).map((tag, index) => (
-                  <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
-                    <TagIcon className="w-3 h-3 mr-1" />
-                    {tag}
-                  </span>
-                ))}
-                {blog.tags && blog.tags.length > 3 && (
-                  <span className="text-xs text-gray-500">+{blog.tags.length - 3} more</span>
+
+              <div>
+                <Label htmlFor="excerpt" className="text-sm font-medium text-gray-700 mb-2 block">
+                  Excerpt
+                </Label>
+                <Controller
+                  name="excerpt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Input 
+                      {...field} 
+                      id="excerpt"
+                      placeholder="Brief description of the blog post" 
+                    />
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="category" className="text-sm font-medium text-gray-700 mb-2 block">
+                    Category *
+                  </Label>
+                  <Controller
+                    name="category"
+                    control={form.control}
+                    render={({ field }) => (
+                      <select 
+                        {...field} 
+                        id="category"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        {categories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    )}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="status" className="text-sm font-medium text-gray-700 mb-2 block">
+                    Status *
+                  </Label>
+                  <Controller
+                    name="status"
+                    control={form.control}
+                    render={({ field }) => (
+                      <select 
+                        {...field} 
+                        id="status"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">Tags</Label>
+                <div className="flex gap-2 mb-3">
+                  <input 
+                    value={newTag} 
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    placeholder="Add a tag" 
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={addTag}
+                    variant="outline"
+                    disabled={!newTag.trim()}
+                  >
+                    Add Tag
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(form.getValues('tags') || []).map(tag => (
+                    <span 
+                      key={tag} 
+                      className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-blue-200 transition-colors flex items-center gap-1" 
+                      onClick={() => removeTag(tag)}
+                    >
+                      {tag} 
+                      <span className="ml-1 hover:text-blue-600">&times;</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Featured Image */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">Featured Image *</Label>
+                <Controller
+                  name="featuredImage"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <div>
+                      <Input 
+                        {...field} 
+                        placeholder="Image URL (http:// or https://)" 
+                        className={fieldState.error ? 'border-red-500' : ''}
+                      />
+                      {fieldState.error && (
+                        <p className="text-red-500 text-sm mt-1">{fieldState.error.message}</p>
+                      )}
+                    </div>
+                  )}
+                />
+                <div className="mt-3">
+                  <Label htmlFor="imageFile" className="text-sm text-gray-600 mb-2 block">
+                    Or upload an image file:
+                  </Label>
+                  <input 
+                    id="imageFile"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={onImageChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                {imagePreview && (
+                  <div className="mt-3">
+                    <img 
+                      src={imagePreview} 
+                      alt="Preview" 
+                      className="max-h-48 w-auto rounded-lg border border-gray-300" 
+                    />
+                  </div>
                 )}
               </div>
-              
-              <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                <span>By {blog.author}</span>
-                <span>{formatDate(blog.createdAt)}</span>
-              </div>
-              
-              <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                <div className="flex items-center space-x-4">
-                  <span className="flex items-center">
-                    <EyeIcon className="w-4 h-4 mr-1" />
-                    {blog.views || 0}
-                  </span>
-                  <span className="flex items-center">
-                    <HeartIcon className="w-4 h-4 mr-1" />
-                    {blog.likes || 0}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex justify-between">
-                <button
-                  onClick={() => handleEdit(blog)}
-                  className="text-yellow-600 hover:text-yellow-800 font-medium text-sm flex items-center"
-                >
-                  <PencilIcon className="w-4 h-4 mr-1" />
-                  Edit
-                </button>
-                <button
-                  onClick={() => dispatch(toggleBlogStatus(blog._id || blog.id))}
-                  className={`font-medium text-sm flex items-center ${
-                    blog.status === 'published' 
-                      ? 'text-yellow-600 hover:text-yellow-800' 
-                      : 'text-green-600 hover:text-green-800'
-                  }`}
-                >
-                  <EyeIcon className="w-4 h-4 mr-1" />
-                  {blog.status === 'published' ? 'Unpublish' : 'Publish'}
-                </button>
-                <button
-                  onClick={() => handleDelete(blog._id || blog.id)}
-                  className="text-red-600 hover:text-red-800 font-medium text-sm flex items-center"
-                >
-                  <TrashIcon className="w-4 h-4 mr-1" />
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {/* Empty State */}
-      {!loading && filteredBlogs.length === 0 && (
-        <div className="text-center py-16">
-          <div className="text-gray-600 mb-4">
-            <div className="w-24 h-24 mx-auto mb-6 bg-white rounded-full flex items-center justify-center border border-yellow-200">
-              <CalendarIcon className="w-12 h-12 text-yellow-600" />
-            </div>
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No blogs found</h3>
-          <p className="text-gray-600">
-            {searchTerm || statusFilter !== 'all' || categoryFilter !== 'all' 
-              ? 'Try adjusting your filters or search terms' 
-              : 'Create your first blog post to get started!'
-            }
-          </p>
-        </div>
-      )}
+              {/* Content - EmailEditor */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">Blog Content *</Label>
+                <Controller
+                  name="blogContent"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <div>
+                      <div className="border border-gray-300 rounded-lg overflow-hidden">
+                        <EmailEditor
+                          ref={emailEditorRef}
+                          onReady={(editor) => {
+                            if (editingBlog?.blogContent?.design) {
+                              editor.loadDesign(editingBlog.blogContent.design);
+                            }
+                          }}
+                          onLoad={() => {
+                            if (emailEditorRef.current?.editor && editingBlog?.blogContent?.design) {
+                              emailEditorRef.current.editor.loadDesign(editingBlog.blogContent.design);
+                            }
+                          }}
+                          minHeight={400}
+                          options={{
+                            displayMode: 'email',
+                            locale: 'en-US',
+                            tools: {
+                              form: { enabled: false }
+                            }
+                          }}
+                        />
+                      </div>
+                      {fieldState.error && (
+                        <p className="text-red-500 text-sm mt-1">Content is required</p>
+                      )}
+                    </div>
+                  )}
+                />
+              </div>
 
-      {/* Add/Edit Blog Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">
-                {editingBlog ? 'Edit Blog Post' : 'Add New Blog Post'}
-              </h3>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                  />
-                </div>
+              {/* SEO Meta Fields */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                <h3 className="font-semibold text-gray-900">SEO Settings (Optional)</h3>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.author}
-                    onChange={(e) => setFormData({ ...formData, author: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                  >
-                    {categories.map((category) => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image</label>
-                  <div className="space-y-2">
-                    <input
-                      type="url"
-                      value={formData.featuredImage}
-                      onChange={(e) => setFormData({ ...formData, featuredImage: e.target.value, featuredImageFile: null })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                      placeholder="https://example.com/image.jpg OR upload file below"
-                    />
-                    <div className="text-sm text-gray-500">OR</div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Excerpt</label>
-                  <textarea
-                    value={formData.excerpt}
-                    onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
-                    rows="2"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                    placeholder="Brief description of the blog post..."
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
-                  <textarea
-                    value={formData.content}
-                    onChange={(e) => {
-                      setFormData({ 
-                        ...formData, 
-                        content: e.target.value,
-                        blogContent: { ...formData.blogContent, markup: e.target.value }
-                      });
-                    }}
-                    rows="8"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                    placeholder="Write your blog content here..."
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {formData.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() => removeTag(tag)}
-                          className="ml-2 text-yellow-600 hover:text-yellow-800"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                      placeholder="Add tag..."
-                    />
-                    <button
-                      type="button"
-                      onClick={addTag}
-                      className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Meta Title</label>
-                  <input
-                    type="text"
-                    value={formData.metaTitle}
-                    onChange={(e) => setFormData({ ...formData, metaTitle: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                    placeholder="SEO title..."
+                  <Label htmlFor="metaTitle" className="text-sm font-medium text-gray-700 mb-2 block">
+                    Meta Title
+                  </Label>
+                  <Controller
+                    name="metaTitle"
+                    control={form.control}
+                    render={({ field }) => (
+                      <Input 
+                        {...field} 
+                        id="metaTitle"
+                        placeholder="SEO Meta Title" 
+                      />
+                    )}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
-                  <textarea
-                    value={formData.metaDescription}
-                    onChange={(e) => setFormData({ ...formData, metaDescription: e.target.value })}
-                    rows="2"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                    placeholder="SEO description..."
+                  <Label htmlFor="metaDescription" className="text-sm font-medium text-gray-700 mb-2 block">
+                    Meta Description
+                  </Label>
+                  <Controller
+                    name="metaDescription"
+                    control={form.control}
+                    render={({ field }) => (
+                      <textarea 
+                        {...field} 
+                        id="metaDescription"
+                        rows={3} 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        placeholder="SEO Meta Description" 
+                      />
+                    )}
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
+              <DialogFooter className="gap-3">
+                <Button 
                   type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 border border-gray-300 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  variant="outline" 
+                  onClick={() => setShowModal(false)}
                 >
                   Cancel
-                </button>
-                <button
-                  type="submit"
+                </Button>
+                <Button 
+                  type="submit" 
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-yellow-500 border border-transparent rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-50"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {loading ? 'Saving...' : editingBlog ? 'Update' : 'Create'} Blog Post
-                </button>
-              </div>
+                  {loading ? 'Saving...' : editingBlog ? "Update Blog" : "Create Blog"}
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
-};
-
-export default Blogs;
+}
