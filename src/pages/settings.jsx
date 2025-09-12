@@ -29,7 +29,7 @@ const Settings = () => {
       <div className="max-w-3xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Settings</h1>
-          <LogoutButton className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors" />
+          <LogoutButton className="bg-orange-500 text-white px-4 py-2 rounded  transition-colors" />
         </div>
 
         {/* Global Error Message */}
