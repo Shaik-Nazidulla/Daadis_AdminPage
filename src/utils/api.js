@@ -554,191 +554,36 @@ export const ordersAPI = {
     }),
 };
 
-// ----------------- BLOGS - FIXED VERSION -----------------
+// Updated blogsAPI in api.js
 export const blogsAPI = {
-  getAllBlogs: () => apiRequest('/blog'),
-  getBlogById: (blogId) => apiRequest(`/blog/${blogId}`),
-
-  createBlog: async (blogData) => {
-    // Check if we have file upload or just URL
-    if (blogData.featuredImageFile && blogData.featuredImageFile instanceof File) {
-      // Use FormData for file uploads
-      const formData = new FormData();
-      
-      // Core fields
-      formData.append('title', blogData.title || '');
-      formData.append('content', blogData.content || '');
-      formData.append('author', blogData.author || '');
-      formData.append('category', blogData.category || '');
-      formData.append('status', blogData.status || 'draft');
-      
-      // Optional fields
-      if (blogData.excerpt) formData.append('excerpt', blogData.excerpt);
-      if (blogData.metaTitle) formData.append('metaTitle', blogData.metaTitle);
-      if (blogData.metaDescription) formData.append('metaDescription', blogData.metaDescription);
-
-      // Handle tags array
-      if (Array.isArray(blogData.tags) && blogData.tags.length > 0) {
-        blogData.tags.forEach((tag, index) => {
-          if (tag && tag.trim()) {
-            formData.append(`tags[${index}]`, tag.trim());
-          }
-        });
-      }
-
-      // Try multiple possible field names - your server might expect a different one
-      // Most common options based on backend configurations:
-      
-      // Option 1: Try the most common field names first
-      const imageFieldNames = ['image', 'file', 'featuredImage', 'blogImage', 'upload'];
-      
-      // For now, let's try 'image' first (most common)
-      formData.append('image', blogData.featuredImageFile);
-      
-      console.log('Creating blog with file upload - trying field name: image');
-      console.log('FormData entries:');
-      for (let [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(`  ${key}: File(${value.name}, ${(value.size/1024).toFixed(2)}KB, ${value.type})`);
-        } else {
-          console.log(`  ${key}: ${value}`);
-        }
-      }
-
-      // First attempt with 'image' field
-      try {
-        return await apiRequest('/blog/create', {
-          method: 'POST',
-          body: formData,
-        });
-      } catch (error) {
-        console.log('Failed with image field, trying featuredImage...');
-        
-        // Remove the 'image' entry and try 'featuredImage'
-        formData.delete('image');
-        formData.append('featuredImage', blogData.featuredImageFile);
-        
-        try {
-          return await apiRequest('/blog/create', {
-            method: 'POST',
-            body: formData,
-          });
-        } catch (error2) {
-          console.log('Failed with featuredImage field, trying file...');
-          
-          // Remove and try 'file'
-          formData.delete('featuredImage');
-          formData.append('file', blogData.featuredImageFile);
-          
-          try {
-            return await apiRequest('/blog/create', {
-              method: 'POST',
-              body: formData,
-            });
-          } catch (error3) {
-            console.log('Failed with file field, trying blogImage...');
-            
-            // Remove and try 'blogImage' (your original)
-            formData.delete('file');
-            formData.append('blogImage', blogData.featuredImageFile);
-            
-            // This will throw if it fails - let it bubble up
-            return await apiRequest('/blog/create', {
-              method: 'POST',
-              body: formData,
-            });
-          }
-        }
-      }
-      
-    } else {
-      // Use JSON for URL-based images (unchanged)
-      const payload = {
-        title: blogData.title,
-        content: blogData.content,
-        author: blogData.author,
-        category: blogData.category,
-        status: blogData.status,
-        excerpt: blogData.excerpt,
-        featuredImage: blogData.featuredImage,
-        metaTitle: blogData.metaTitle,
-        metaDescription: blogData.metaDescription,
-        tags: blogData.tags || []
-      };
-
-      console.log('Creating blog with URL image');
-      console.log('JSON payload:', payload);
-
-      return apiRequest('/blog/create', {
-        method: 'POST',
-        body: JSON.stringify(payload),
+  getAllBlogs: () => apiRequest('/blog', { method: 'GET' }),
+  getBlogById: id => apiRequest(`/blog/${id}`, { method: 'GET' }),
+  
+  createBlog: async ({ formData }) => {
+    return apiRequest('/blog/create', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+  
+  // FIXED: updateBlog should also handle FormData, not JSON
+  updateBlog: async ({ id, updates }) => {
+    // If updates is FormData, send it directly
+    if (updates instanceof FormData) {
+      return apiRequest(`/blog/edit/${id}`, {
+        method: 'PUT',
+        body: updates,
       });
     }
+    
+    // Otherwise, wrap in JSON (fallback for non-FormData updates)
+    return apiRequest(`/blog/edit/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ blogData: updates }),
+    });
   },
-
-  // Update blog - FIXED to handle both file and URL updates
-  updateBlog: (blogId, blogData) => {
-    // Check if we have file upload or just URL
-    if (blogData.featuredImageFile && blogData.featuredImageFile instanceof File) {
-      // Use FormData for file uploads
-      const formData = new FormData();
-      
-      // Core fields
-      if (blogData.title) formData.append('title', blogData.title);
-      if (blogData.content) formData.append('content', blogData.content);
-      if (blogData.author) formData.append('author', blogData.author);
-      if (blogData.category) formData.append('category', blogData.category);
-      if (blogData.status) formData.append('status', blogData.status);
-      if (blogData.excerpt) formData.append('excerpt', blogData.excerpt);
-      if (blogData.metaTitle) formData.append('metaTitle', blogData.metaTitle);
-      if (blogData.metaDescription) formData.append('metaDescription', blogData.metaDescription);
-
-      // Handle tags array
-      if (Array.isArray(blogData.tags) && blogData.tags.length > 0) {
-        blogData.tags.forEach((tag, index) => {
-          if (tag && tag.trim()) {
-            formData.append(`tags[${index}]`, tag.trim());
-          }
-        });
-      }
-
-      // The image file
-      formData.append('blogImage', blogData.featuredImageFile);
-
-      console.log('🖼️ Updating blog with file upload');
-
-      return apiRequest(`/blog/edit/${blogId}`, {
-        method: 'PUT',
-        body: formData,
-      });
-      
-    } else {
-      // Use JSON for URL-based images or no image changes
-      const payload = {};
-      
-      if (blogData.title) payload.title = blogData.title;
-      if (blogData.content) payload.content = blogData.content;
-      if (blogData.author) payload.author = blogData.author;
-      if (blogData.category) payload.category = blogData.category;
-      if (blogData.status) payload.status = blogData.status;
-      if (blogData.excerpt) payload.excerpt = blogData.excerpt;
-      if (blogData.featuredImage) payload.featuredImage = blogData.featuredImage;
-      if (blogData.metaTitle) payload.metaTitle = blogData.metaTitle;
-      if (blogData.metaDescription) payload.metaDescription = blogData.metaDescription;
-      if (blogData.tags) payload.tags = blogData.tags;
-
-      console.log('🌐 Updating blog with JSON');
-      console.log('📋 JSON payload:', payload);
-
-      return apiRequest(`/blog/edit/${blogId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-    }
-  },
-
-  // Delete blog
-  deleteBlog: (blogId) => apiRequest(`/blog/delete/${blogId}`, { method: 'DELETE' }),
+  
+  deleteBlog: id => apiRequest(`/blog/delete/${id}`, { method: 'DELETE' }),
 };
 
 export default apiRequest;
