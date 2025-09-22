@@ -210,6 +210,7 @@ export default function Blogs() {
           id: editingBlog._id || editingBlog.id, 
           updates: formData 
         })).unwrap();
+        await dispatch(fetchAllBlogs());
         console.log('Update result:', result);
         toast.success('Blog updated successfully');
       } else {
