@@ -1,5 +1,5 @@
 // utils/api.js    (new api.js)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://daadis-server.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.daadis.in';
 
 // Enhanced API request function with comprehensive error handling
 export const apiRequest = async (endpoint, options = {}) => {
