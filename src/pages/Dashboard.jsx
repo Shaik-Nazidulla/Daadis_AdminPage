@@ -76,7 +76,7 @@ const Dashboard = () => {
     return orderDate >= start && orderDate <= end;
   });
 
-  // Enhanced statistics calculations
+  // Enhanced statistics calculations - Revenue only from processing orders
   const stats = {
     totalProducts: products.length,
     activeCategories: categories.filter(cat => cat.isActive !== false).length,
@@ -85,8 +85,8 @@ const Dashboard = () => {
     pendingOrders: orders.filter(o => o.status === 'pending').length,
     processingOrders: orders.filter(o => ['processing', 'shipped'].includes(o.status)).length,
     completedOrders: orders.filter(o => o.status === 'delivered').length,
-    totalRevenue: orders.filter(o => !['cancelled', 'failed', 'returned'].includes(o.status)).reduce((sum, o) => sum + o.total, 0),
-    todaysRevenue: timeFilteredOrders.filter(o => !['cancelled', 'failed', 'returned'].includes(o.status)).reduce((sum, o) => sum + o.total, 0),
+    totalRevenue: orders.filter(o => o.status === 'processing').reduce((sum, o) => sum + o.total, 0),
+    todaysRevenue: timeFilteredOrders.filter(o => o.status === 'processing').reduce((sum, o) => sum + o.total, 0),
     lowStockProducts: products.filter(p => p.stock <= 10).length,
     outOfStockProducts: products.filter(p => p.stock === 0).length,
     activeDiscounts: discounts.filter(d => d.status === 'active').length,
@@ -229,13 +229,6 @@ const Dashboard = () => {
 
   const orderStatusCards = [
     {
-      title: 'Pending Orders',
-      value: stats.pendingOrders,
-      icon: ClockIcon,
-      color: 'yellow',
-      description: 'Awaiting confirmation'
-    },
-    {
       title: 'Processing',
       value: stats.processingOrders,
       icon: TruckIcon,
@@ -251,7 +244,10 @@ const Dashboard = () => {
     }
   ];
 
-  const recentOrders = orders.slice(0, 6);
+  // Filter recent orders to show only processing, shipped, delivered, and returned orders
+  const recentOrders = orders
+    .filter(order => ['processing', 'shipped', 'delivered', 'returned'].includes(order.status))
+    .slice(0, 6);
   const topProducts = getTopProducts();
   const recentActivity = getRecentActivity();
 
@@ -359,8 +355,9 @@ const Dashboard = () => {
                 <div className="flex items-center space-x-4">
                   <div className={`w-3 h-3 rounded-full ${
                     order.status === 'delivered' ? 'bg-green-400' :
-                    order.status === 'pending' ? 'bg-yellow-400' :
+                    order.status === 'returned' ? 'bg-orange-400' :
                     order.status === 'processing' ? 'bg-blue-400' :
+                    order.status === 'shipped' ? 'bg-indigo-400' :
                     'bg-gray-400'
                   }`}></div>
                   <div>
@@ -373,8 +370,9 @@ const Dashboard = () => {
                   <p className="font-semibold text-gray-900">₹{order.total?.toLocaleString()}</p>
                   <span className={`inline-block px-2 py-1 text-xs rounded-full capitalize ${
                     order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                    order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    order.status === 'returned' ? 'bg-orange-100 text-orange-800' :
                     order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                    order.status === 'shipped' ? 'bg-indigo-100 text-indigo-800' :
                     'bg-gray-100 text-gray-800'
                   }`}>
                     {order.status}

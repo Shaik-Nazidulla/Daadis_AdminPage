@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrders, updateOrderStatus, fetchOrderById, clearError } from '../redux/slices/ordersSlice';
+import InvoicePrint from '../components/InvoicePrint';
 import { 
   MagnifyingGlassIcon, 
   EyeIcon,
@@ -24,6 +25,7 @@ const Orders = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
 
   // Fetch orders on component mount
   useEffect(() => {
@@ -40,7 +42,6 @@ const Orders = () => {
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       await dispatch(updateOrderStatus({ orderId, status: newStatus })).unwrap();
-      // If this is the selected order, update it
       if (selectedOrder && selectedOrder._id === orderId) {
         setSelectedOrder({...selectedOrder, status: newStatus});
       }
@@ -54,6 +55,16 @@ const Orders = () => {
       const result = await dispatch(fetchOrderById(orderId)).unwrap();
       setSelectedOrder(result);
       setShowOrderDetail(true);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+    }
+  };
+
+  const handlePrintInvoice = async (orderId) => {
+    try {
+      const result = await dispatch(fetchOrderById(orderId)).unwrap();
+      setSelectedOrder(result);
+      setShowInvoice(true);
     } catch (error) {
       console.error('Failed to fetch order details:', error);
     }
@@ -328,14 +339,7 @@ const Orders = () => {
                         className="text-orange-600 hover:text-orange-900"
                         title="View Details"
                       >
-                        <EyeIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => window.print()}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Print Order"
-                      >
-                        <PrinterIcon className="w-4 h-4" />
+                        <EyeIcon className="w-5 h-5" />
                       </button>
                     </div>
                   </td>
@@ -490,7 +494,7 @@ const Orders = () => {
               )}
 
               {/* Status Update */}
-              <div className="flex justify-between items-center pt-4">
+              <div className="flex justify-between items-center pt-4 border-t">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Update Status:</label>
                   <select
@@ -512,13 +516,16 @@ const Orders = () => {
                     <option value="paid">Paid</option>
                   </select>
                 </div>
-                <div className="space-x-3">
+                <div className="flex space-x-3">
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      setShowOrderDetail(false);
+                      setShowInvoice(true);
+                    }}
                     className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
                   >
                     <PrinterIcon className="w-4 h-4" />
-                    Print Order
+                    Print Invoice
                   </button>
                   <button
                     onClick={() => setShowOrderDetail(false)}
@@ -532,6 +539,39 @@ const Orders = () => {
           </div>
         </div>
       )}
+
+      {/* Invoice Print Modal */}
+      {/* Invoice Print Modal */}
+{showInvoice && selectedOrder && (
+  <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] overflow-y-auto">
+      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10 modal-header">
+        <h3 className="text-lg font-medium text-gray-900">Invoice</h3>
+        <div className="flex space-x-3">
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
+          >
+            <PrinterIcon className="w-4 h-4" />
+            Print
+          </button>
+          <button
+            onClick={() => setShowInvoice(false)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <XCircleIcon className="w-6 h-6" />
+          </button>
+        </div>
+      </div>
+      <div className="p-4">
+        <InvoicePrint 
+          order={selectedOrder}
+          invoiceNumber={selectedOrder.orderNumber}
+        />
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
