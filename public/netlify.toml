@@ -1,0 +1,1 @@
+[build] publish = "dist" # or "build" for React, etc. command = "npm run build" [[redirects]] from = "/*" to = "/index.html"   status = 200
