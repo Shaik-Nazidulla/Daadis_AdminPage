@@ -1,6 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
-const InvoicePrint = ({ order, invoiceNumber }) => {
+const InvoicePrint = ({ order}) => {
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  useEffect(() => {
+    const generateInvoiceNumber = () => {
+      // Get current counter from localStorage or start at 0
+      let currentCounter = parseInt(localStorage.getItem('invoiceCounter') || '0');
+      
+      // Increment counter
+      currentCounter += 1;
+      
+      // Save back to localStorage
+      localStorage.setItem('invoiceCounter', currentCounter.toString());
+      
+      // Format as WEB00001, WEB00002, etc.
+      const formattedNumber = `WEB${currentCounter.toString().padStart(5, '0')}`;
+      
+      setInvoiceNumber(formattedNumber);
+    };
+
+    generateInvoiceNumber();
+  }, [order.id]); // Generate when order changes
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
       day: '2-digit',
