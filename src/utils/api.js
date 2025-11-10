@@ -586,4 +586,31 @@ export const blogsAPI = {
   deleteBlog: id => apiRequest(`/blog/delete/${id}`, { method: 'DELETE' }),
 };
 
+// ----------------- MANUFACTURER -----------------
+export const manufacturerAPI = {
+  // Get all manufacturers
+  getAllManufacturers: () => apiRequest('/manufacturer', { method: 'GET' }),
+
+  // Get manufacturer by ID
+  getManufacturerById: (id) => apiRequest(`/manufacturer/${id}`, { method: 'GET' }),
+
+  // Create manufacturer
+  createManufacturer: (manufacturerData) =>
+    apiRequest('/manufacturer', {
+      method: 'POST',
+      body: JSON.stringify(manufacturerData),
+    }),
+
+  // Update manufacturer
+  updateManufacturer: (id, manufacturerData) =>
+    apiRequest(`/manufacturer/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(manufacturerData),
+    }),
+
+  // Delete manufacturer
+  deleteManufacturer: (id) =>
+    apiRequest(`/manufacturer/${id}`, { method: 'DELETE' }),
+};
+
 export default apiRequest;

@@ -10,7 +10,8 @@ import {
   ShoppingCartIcon,
   CogIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline';
 
 const Navbar = () => {
@@ -21,6 +22,7 @@ const Navbar = () => {
     { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
     { name: 'Products', path: '/products', icon: ShoppingBagIcon },
     { name: 'Categories', path: '/categories', icon: TagIcon },
+    { name: 'Manufacturers', path: '/manufacturers', icon: BuildingOfficeIcon },
     { name: 'Discounts', path: '/discounts', icon: ReceiptPercentIcon },
     { name: 'Blogs', path: '/blogs', icon: DocumentTextIcon },
     { name: 'Orders', path: '/orders', icon: ShoppingCartIcon },

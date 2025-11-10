@@ -6,7 +6,7 @@ import discountsReducer from './slices/discountsSlice';
 import blogsReducer from './slices/blogsSlice';
 import ordersReducer from './slices/ordersSlice';
 import authReducer from './slices/authSlice';
-
+import manufacturerReducer from './slices/manufacturerSlice';
 export const store = configureStore({
   reducer: {
     auth: authReducer,
@@ -15,6 +15,7 @@ export const store = configureStore({
     discounts: discountsReducer,
     blogs: blogsReducer,
     orders: ordersReducer,
+    manufacturer: manufacturerReducer
   },
 });
 

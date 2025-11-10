@@ -14,6 +14,7 @@ import Orders from './pages/orders';
 import Login from './pages/Login';
 import Settings from './pages/settings';
 import AuthGuard from './components/AuthGuard';
+import Manufacturer from './pages/Manufacturer';
 import './App.css';
 
 const AppContent = () => {
@@ -58,6 +59,14 @@ const AppContent = () => {
                       <Categories />
                     </AuthGuard>
                   } 
+                />
+                <Route
+                  path="/manufacturers"
+                  element={
+                    <AuthGuard>
+                      <Manufacturer />
+                    </AuthGuard>
+                  }
                 />
                 <Route 
                   path="/discounts" 
