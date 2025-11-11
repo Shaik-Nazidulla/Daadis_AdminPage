@@ -26,6 +26,7 @@ const Manufacturer = () => {
   const [editingManufacturer, setEditingManufacturer] = useState(null);
   const [formData, setFormData] = useState({
     code: '',
+    name: '',        // ADDED name field
     address: '',
   });
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,7 +39,7 @@ const Manufacturer = () => {
     if (success) {
       setIsModalOpen(false);
       setEditingManufacturer(null);
-      setFormData({ code: '', address: '' });
+      setFormData({ code: '', name: '', address: '' });  // UPDATED: Reset with name
       setTimeout(() => {
         dispatch(clearSuccess());
       }, 3000);
@@ -58,11 +59,12 @@ const Manufacturer = () => {
       setEditingManufacturer(manufacturer);
       setFormData({
         code: manufacturer.code,
+        name: manufacturer.name || '',     // ADDED: Include name
         address: manufacturer.address,
       });
     } else {
       setEditingManufacturer(null);
-      setFormData({ code: '', address: '' });
+      setFormData({ code: '', name: '', address: '' });  // UPDATED: Reset with name
     }
     setIsModalOpen(true);
   };
@@ -70,7 +72,7 @@ const Manufacturer = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingManufacturer(null);
-    setFormData({ code: '', address: '' });
+    setFormData({ code: '', name: '', address: '' });  // UPDATED: Reset with name
     dispatch(clearCurrentManufacturer());
   };
 
@@ -85,7 +87,8 @@ const Manufacturer = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.code.trim() || !formData.address.trim()) {
+    // UPDATED: Validation now includes name
+    if (!formData.code.trim() || !formData.name.trim() || !formData.address.trim()) {
       return;
     }
 
@@ -107,9 +110,11 @@ const Manufacturer = () => {
     }
   };
 
+  // UPDATED: Filter now includes name field
   const filteredManufacturers = manufacturers.filter(
     (manufacturer) =>
       manufacturer.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (manufacturer.name && manufacturer.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       manufacturer.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -174,6 +179,10 @@ const Manufacturer = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Code
                   </th>
+                  {/* ADDED: Name column header */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Address
                   </th>
@@ -191,6 +200,12 @@ const Manufacturer = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-medium text-gray-900">
                         {manufacturer.code}
+                      </span>
+                    </td>
+                    {/* ADDED: Name column data */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-semibold text-gray-800">
+                        {manufacturer.name || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -255,6 +270,22 @@ const Manufacturer = () => {
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., SMS"
+                  />
+                </div>
+
+                {/* ADDED: Name input field */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., SMS traders"
                   />
                 </div>
 
